@@ -1,0 +1,40 @@
+[
+    {
+        "name": "calculate",
+        "description": "Evaluate a mathematical expression",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "expression": {
+                    "type": "string",
+                    "description": "The mathematical expression to evaluate"
+                }
+            },
+            "required": ["expression"]
+        }
+    },
+    {
+        "name": "fillExcel",
+        "description": "Fill an Excel file with data. You are the user of the Excel file and you can use judgment to fill the data based on past tasks",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "The path to the Excel file to fill"
+                },
+                "data": {
+                    "type": "array",
+                    "description": "The data to fill the Excel file with",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": ["file", "data"]
+        }
+    }
+]
