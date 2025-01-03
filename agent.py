@@ -40,13 +40,18 @@ class Agent():
             },
             {
                 "action": "left click",
-                "x": "NUMBER FROM 1-2879",  
-                "y": "NUMBER FROM 1-1919" 
+                "x": "replace with NUMBER FROM 1-2879",  
+                "y": "replace with NUMBER FROM 1-1919" 
             },
             {
                 "action": "left click",
-                "x": "NUMBER FROM 1-2879",  
-                "y": "NUMBER FROM 1-1919" 
+                "x": "replace with NUMBER FROM 1-2879",  
+                "y": "replace with NUMBER FROM 1-1919" 
+            },
+            {
+                "action": "drag cursor",
+                "x": "replace with NUMBER FROM 1-2879",
+                "y": "replace with NUMBER FROM 1-1919"
             },
             {
                 "action": "vertical scroll",
@@ -84,6 +89,10 @@ class Agent():
         pyautogui.rightClick(x, y)
         time.sleep(0.2)
 
+    def drag_cursor(self, x, y):
+        pyautogui.dragTo(x, y, 0.5, button='left')
+        time.sleep(0.2)
+
     def horizontal_scroll(self, amount):
         pyautogui.hscroll(amount)
         time.sleep(0.2)
@@ -92,16 +101,40 @@ class Agent():
         pyautogui.scroll(amount)
         time.sleep(0.2)
 
-    def execute(self, task):
-        task_parts = task.split(" ")
-        action = task_parts[0]
-        arguments = task_parts[1:]
-
-        if action in self.task_library:
-            self.task = action
-            self.task_library[action](arguments)
-        else:
-            print(f"Task '{action}' not found")
+    def execute(self, command):
+        if "right click" in command:
+            c = json.loads(command)
+            x = int(c["x"])
+            y = int(c["y"])
+            print(f"right clicking at {x},{y}")
+            self.right_click(x, y)
+        elif "left click" in command:
+            c = json.loads(command)
+            x = int(c['x'])
+            y = int(c['y'])
+            print(f"left clicking at {x},{y}")
+            self.left_click(x, y)
+        elif "drag cursor" in command:
+            c = json.loads(command)
+            x = int(c['x'])
+            y = int(c['y'])
+            print(f"dragging cursor to {x},{y}")
+            self.drag_cursor(x, y)
+        elif "vertical scroll" in command:
+            c = json.loads(command)
+            amount = int(c['amount'])
+            print(f"scrolling {amount} times")
+            self.vertical_scroll(amount)
+        elif "horizontal scroll" in command:
+            c = json.loads(command)
+            amount = int(c['amount'])
+            print(f"scrolling {amount} times")
+            self.horizontal_scroll(amount)
+        elif "type text" in command:
+            c = json.loads(command)
+            text = c['text']
+            print(f"typing text: {text}")
+            self.type_text(text)
 
     def call(self,text,action_history):
         chat_completion = self.client.chat.completions.create(
