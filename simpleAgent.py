@@ -12,9 +12,11 @@ import sys
 import os
 import urllib.request
 from PIL import Image
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_pinecone import PineconeEmbeddings
+from pinecone import Pinecone
 
-
-#Mars - This is my file - too lazy to put it into one
 import inspectTree
 print("ALL IMPORTS COMPLETE")
 
@@ -52,65 +54,8 @@ def opSetUp():
 
 client = Groq(api_key = API_KEY)
 
-#Old call function
-'''
-def call(client, query, img_base64, chat_history, feature_list):
-    completion = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        messages=[
-        {
-            "role": "user",
-            "content": [
-            {
-                "type": "text",
-                "text": (
-                    f"You are an agent that controls a computer to complete tasks. "
-                    f"Your task is: {query}. \n\n"
-                    f"The actions you have taken so far are: {chat_history}. The list of elements on this laptop is here: {feature_list}.\n"
-                    "Interpret the screenshot given. If the last action you tried did not succeed, try again with a different method.\n"
-                    "Assuming all your actions are completed correctly, respond ONLY with {{ \"tool\": \"Done\", \"args\": {{}} }} if the exact task specified is complete (this is to STOP). When in doubt, assume the task is completed."
-                    "If not done, choose **one** tool below and output **only** the JSON object specified.\n"
-                    "Prioritize tools that don't require you to use coordinates (e.g. pressing hotkeys like delete/Ctrl-C) over tools that do (e.g. moving/clicking):\n"
-                    "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\" }} }}\n\n"
-                    "- Type-Tool: Type text on an element (can clear first). {{ \"tool\": \"Type-Tool\", \"args\": {{ \"text\": \"value\" }} }}\n\n"
-                    #"- Clipboard-Tool: Copy/paste using clipboard. {{ \"tool\": \"Clipboard-Tool\", \"args\": {{ \"action\": \"value (copy or paste)\" }} }}\n\n"
-                    "- Scroll-Tool: Scroll on the screen. {{ \"tool\": \"Scroll-Tool\", \"args\": {{ \"axis\": \"horizontal/vertical\", Hello, World!\"direction\": \"up/down\" }} }}\n\n"
-                    "- Drag-Tool: Drag from one point to another. {{ \"tool\": \"Drag-Tool\", \"args\": {{ \"initial_element\": \"value\", \"final_position\": \"value\" }} }}\n\n"
-                    #"- Move-Tool: Move the mouse pointer. {{ \"tool\": \"Move-Tool\", \"args\": {{ \"destination\": \"value\" }} }}\n\n"
-                    "- Shortcut-Tool: Press keyboard shortcuts (e.g., Ctrl+C to copy, Ctrl+V to paste). {{ \"tool\": \"Shortcut-Tool\", \"args\": {{ \"keys\": [\"a list of keys\"] }} }}\n\n"
-                    "- Key-Tool: Press a single key. {{ \"tool\": \"Key-Tool\", \"args\": {{ \"key\": \"value\" }} }}\n\n"
-                    #"- Wait-Tool: Wait for a short time. {{ \"tool\": \"Wait-Tool\", \"args\": {{ \"time\": \"value\" }} }}\n\n"
-                    "- Launch-Tool: Open an app via start menu. {{ \"tool\": \"Launch-Tool\", \"args\": {{ \"app\": \"value\" }} }}\n\n"
-                    #"- Shell-Tool: Run a PowerShell command. {{ \"tool\": \"Shell-Tool\", \"args\": {{ \"command\": \"value\" }} }}\n\n"
-                    #"- Scrape-Tool: Extract full webpage content. {{ \"tool\": \"Scrape-Tool\", \"args\": {{ None }} }}\n\n"
-                    #"- Script-Tool: Write and execute a script to control the computer. {{ \"tool\": \"Script-Tool\", \"args\": {{ \"script\": \"value\" }} }}\n\n"
-                    "Only respond with one tool call. If unsure, ask for clarification. \n\n"
-                )
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                "url": img_base64
-                }
-            }
-            ]
-        }
-        ],
-        temperature=0,
-        max_completion_tokens=1024,
-        top_p=1,
-        stream=False,
-        response_format={"type": "json_object"},
-        stop=None,
-    )
-
-    res = completion.choices[0].message
-    action = json.loads(res.content)
-    return action
-'''
-
-#New call function
-def call(client, query, img_base64, chat_history, feature_list):
+def call_with_rag(client, query, img_base64, chat_history, feature_list, context_chunks=None):
+    context = "\n\n".join([chunk.get('metadata', {}).get('text', '') for chunk in context_chunks])
     completion = client.chat.completions.create(
         model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
@@ -122,6 +67,7 @@ def call(client, query, img_base64, chat_history, feature_list):
                     "Stop as soon as possible after the minimum number of steps.\n"
                     "To stop when the task is done, respond ONLY with {\"tool\": \"Done\", \"args\": {}}.\n"
                     "When not done, pick **one** tool for the next step and output ONLY the JSON object specified.\n"
+                    "Some context are provided to help you execute the task. {context}\n" if context else ""
                     "Important: If you want to type something, into a search bar for example, assume that the input for the search is not yet selected. This means you must click on it before typing. If you type and it doesn't work, it means you didn't select the input properly.\n"
                     "Tools are as follows:\n"
                     "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\" }} }}\n\n"
@@ -131,8 +77,65 @@ def call(client, query, img_base64, chat_history, feature_list):
                     "- Shortcut-Tool: Press keyboard shortcuts (e.g., Ctrl+C to copy, Ctrl+V to paste). {{ \"tool\": \"Shortcut-Tool\", \"args\": {{ \"keys\": [\"list of keys\"] }} }}\n\n"
                     "- Key-Tool: Press a single key. {{ \"tool\": \"Key-Tool\", \"args\": {{ \"key\": \"value\" }} }}\n\n"
                     "- Launch-Tool: Open an app. {{ \"tool\": \"Launch-Tool\", \"args\": {{ \"app\": \"value\" }} }}\n\n"
+                    "- Query-Tool: Query Pinecone for relevant chunks. {{ \"tool\": \"Query-Tool\", \"args\": {{ \"query\": \"value\", \"top_k\": value }} }}\n\n"
                     "Only respond with one tool call, strictly in JSON format as specified.\n"
                 )
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Your task is {query}. The actions you have taken so far are: {chat_history}.\n\n"
+                            f"The list of elements on this laptop is here: {feature_list}.\n\n"
+                            "Interpret the screenshot and features given. Try not to perform your last action again."
+                            "Output the JSON object corresponding to the next step."
+                        )
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": img_base64}
+                    }
+                ]
+            }
+        ],
+        temperature=0,
+        max_completion_tokens=1024,
+        top_p=1,
+        stream=False,
+        response_format={"type": "json_object"},
+        stop=None,
+    )
+
+    res = completion.choices[0].message
+    action = json.loads(res.content)
+
+    return action
+
+#New call function
+def call(client, query, img_base64, chat_history, feature_list):
+    prompt = ("You are an agent that controls a computer to complete tasks.\n"
+            "Your task is {query}. If you have already done the task, stop immediately.\n"
+            "Stop as soon as possible after the minimum number of steps.\n"
+            "To stop when the task is done, respond ONLY with {\"tool\": \"Done\", \"args\": {}}.\n"
+            "When not done, pick **one** tool for the next step and output ONLY the JSON object specified.\n"
+            "Important: If you want to type something, into a search bar for example, assume that the input for the search is not yet selected. This means you must click on it before typing. If you type and it doesn't work, it means you didn't select the input properly.\n"
+            "Tools are as follows:\n"
+            "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\" }} }}\n\n"
+            "- Type-Tool: Type text on an element. Output: {{ \"tool\": \"Type-Tool\", \"args\": {{ \"text\": \"value\" }} }}\n\n"
+            "- Scroll-Tool: Scroll on the screen. {{ \"tool\": \"Scroll-Tool\", \"args\": {{ \"axis\": \"horizontal/vertical\", \"direction\": \"up/down\" }} }}\n\n"
+            "- Drag-Tool: Drag from one point to another. {{ \"tool\": \"Drag-Tool\", \"args\": {{ \"initial_element\": \"value\", \"final_position\": \"value\" }} }}\n\n"
+            "- Shortcut-Tool: Press keyboard shortcuts (e.g., Ctrl+C to copy, Ctrl+V to paste). {{ \"tool\": \"Shortcut-Tool\", \"args\": {{ \"keys\": [\"list of keys\"] }} }}\n\n"
+            "- Key-Tool: Press a single key. {{ \"tool\": \"Key-Tool\", \"args\": {{ \"key\": \"value\" }} }}\n\n"
+            "- Launch-Tool: Open an app. {{ \"tool\": \"Launch-Tool\", \"args\": {{ \"app\": \"value\" }} }}\n\n"
+            "Only respond with one tool call, strictly in JSON format as specified.\n")
+    completion = client.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=[
+            {
+                "role": "system",
+                "content": prompt
             },
             {
                 "role": "user",
@@ -213,6 +216,9 @@ def capture_screen(max_size=(800, 800), quality=40):
     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
     return f"data:image/jpeg;base64,{img_base64}"
 
+from langchiane_core.tools import tool
+
+@tool
 def launch_tool(app):
     open_app(app, match_closest=True)
 
@@ -264,6 +270,7 @@ def vision_fallback():
     
     return subset
 
+@tool
 def click_tool(client, feature, subset):
     
     label = click_agent(client, feature, subset)
@@ -297,15 +304,18 @@ def click_tool(client, feature, subset):
     pyautogui.click(x, y)
     return
 
+@tool
 def type_tool(text):
     pyautogui.typewrite(text, interval=0.05)
 
+@tool
 def clipboard_tool(action):
     if action == "copy":
         pyautogui.hotkey('ctrl', 'c')
     elif action == "paste":
         pyautogui.hotkey('ctrl', 'v')
 
+@tool
 def scroll_tool(axis, direction):
     if axis == "vertical":
         if direction == "up":
@@ -318,26 +328,33 @@ def scroll_tool(axis, direction):
         elif direction == "right":
             pyautogui.hscroll(40)
 
+@tool
 def drag_tool(start_x, start_y, end_x, end_y):
     pyautogui.moveTo(start_x, start_y)
     pyautogui.dragTo(end_x, end_y, duration=0.5)
 
+@tool
 def move_tool(x, y):
     pyautogui.moveTo(x, y)
 
+@tool
 def shortcut_tool(keys):
     pyautogui.hotkey(keys)
 
+@tool
 def key_tool(key):
     pyautogui.press(key)
 
+@tool
 def wait_tool(seconds):
     time.sleep(seconds)
 
+@tool
 def shell_tool(command):
     result = subprocess.run(["powershell", "-Command", command], capture_output=True, text=True)
     return result.stdout
 
+@tool
 def script_tool(language, script_str):
     result = subprocess.run(
         [language, '-c', script_str],
@@ -345,14 +362,34 @@ def script_tool(language, script_str):
     )
     return result.stdout
 
+@tool
+def query_pinecone(query_text, top_k=3):
+        """Query Pinecone for relevant chunks"""
+        try:
+            results = index.query_records(
+                namespace="reach-docs",
+                query=query_text,
+                top_k=top_k,
+                include_metadata=True
+            )
+            return results.get('matches', [])
+        except Exception as e:
+            print(f"Error querying Pinecone: {e}")
+            return []
+
 def cua(client, query):
     chat_history = []
+    queried = False
     while True:
         screenshot_base64 = capture_screen()
         
         #Added by Mars here- seems to improve accuracy?
         all_elements=inspectTree.stable_tree()
-        response = call(client, query, screenshot_base64, chat_history, all_elements)
+        if queried:
+            response = call(client, query, screenshot_base64, chat_history, all_elements, context_chunks=all_elements)
+        else:
+            response = call(client, query, screenshot_base64, chat_history, all_elements)
+        queried = False
         chat_history.append(response)
         print(response)
         if(response['tool'] == "Launch-Tool"):
@@ -381,10 +418,16 @@ def cua(client, query):
         elif(response['tool'] == "Script-Tool"):
             script_output = script_tool(response['args']['language'], response['args']['script'])
             print("Script Output:", script_output)
+        elif(response['tool'] == "Query-Tool"):
+            query_results = query_pinecone(response['args']['query'])
+            print("Query Results:", query_results)
+            queried = True
         elif(response['tool'] == "Done"):
             print("Task completed.")
             break
 
         time.sleep(1)
 
-cua(client, "Open Google Chrome, navigate to Youtube, find videos from MrBeast and click the top result.") 
+if __name__ == "__main__":
+    cua(client, "Open Google Chrome, navigate to Youtube, find videos from MrBeast and click the top result.")
+    
