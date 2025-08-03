@@ -52,7 +52,7 @@ def opSetUp():
     #==END OF OMNIPARSER SETUP==
 
 
-client = Groq(api_key = API_KEY)
+client = Groq(api_key = GROQ_API_KEY)
 
 def call_with_rag(client, query, img_base64, chat_history, feature_list, context_chunks=None):
     context = "\n\n".join([chunk.get('metadata', {}).get('text', '') for chunk in context_chunks])
@@ -216,9 +216,7 @@ def capture_screen(max_size=(800, 800), quality=40):
     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
     return f"data:image/jpeg;base64,{img_base64}"
 
-from langchiane_core.tools import tool
 
-@tool
 def launch_tool(app):
     open_app(app, match_closest=True)
 
@@ -270,7 +268,6 @@ def vision_fallback():
     
     return subset
 
-@tool
 def click_tool(client, feature, subset):
     
     label = click_agent(client, feature, subset)
@@ -304,18 +301,15 @@ def click_tool(client, feature, subset):
     pyautogui.click(x, y)
     return
 
-@tool
 def type_tool(text):
     pyautogui.typewrite(text, interval=0.05)
 
-@tool
 def clipboard_tool(action):
     if action == "copy":
         pyautogui.hotkey('ctrl', 'c')
     elif action == "paste":
         pyautogui.hotkey('ctrl', 'v')
 
-@tool
 def scroll_tool(axis, direction):
     if axis == "vertical":
         if direction == "up":
@@ -328,33 +322,26 @@ def scroll_tool(axis, direction):
         elif direction == "right":
             pyautogui.hscroll(40)
 
-@tool
 def drag_tool(start_x, start_y, end_x, end_y):
     pyautogui.moveTo(start_x, start_y)
     pyautogui.dragTo(end_x, end_y, duration=0.5)
 
-@tool
 def move_tool(x, y):
     pyautogui.moveTo(x, y)
 
-@tool
 def shortcut_tool(keys):
     pyautogui.hotkey(keys)
 
-@tool
 def key_tool(key):
     pyautogui.press(key)
 
-@tool
 def wait_tool(seconds):
     time.sleep(seconds)
 
-@tool
 def shell_tool(command):
     result = subprocess.run(["powershell", "-Command", command], capture_output=True, text=True)
     return result.stdout
 
-@tool
 def script_tool(language, script_str):
     result = subprocess.run(
         [language, '-c', script_str],
@@ -362,7 +349,6 @@ def script_tool(language, script_str):
     )
     return result.stdout
 
-@tool
 def query_pinecone(query_text, top_k=3):
         """Query Pinecone for relevant chunks"""
         try:
