@@ -5,13 +5,14 @@ import json
 import win32api
 import hashlib
 import math
+import re
 
 def flatten_tree(element, elements_list):
     info = element.element_info
     name=info.name
     
     #Arbitrary filter on length of string
-    maxLen=400
+    maxLen=80
     if len(name) > maxLen:
         name=name[:maxLen-3] + "..."
     
@@ -68,26 +69,30 @@ def filter_duplicates(elements, tolerance=50):
 
 def getTree():
     time.sleep(1)
-    windowName = GetWindowText(GetForegroundWindow())
-    print("ML-getTree()-Detected Window:", windowName)
+    
+    notSuccess=True
+    while notSuccess:
+        try:
+            windowName = GetWindowText(GetForegroundWindow())
+            print("ML-getTree()-Detected Window:", windowName)
+            
+            escaped_window_name = re.escape(windowName) + ".*"
 
-    words = windowName.split()
-    first_word = " ".join(words[:1])
+            # Try connecting to the application
+            app = Application(backend="uia").connect(title_re=escaped_window_name)
 
-    regex_pattern = first_word + ".*"
-    #regex_pattern=".*Discord"
-    #print(f"ML-getTree()-regexPattern: '{regex_pattern}'")
+            notSuccess=False
 
-    # Connect to app
-    app = Application(backend="uia").connect(title_re=regex_pattern)
+        except Exception as e:
+            print("Something got really fricked up so retrying")
+            time.sleep(0.2)
 
     # Get the top window of that app
     dlg = app.top_window()
 
     all_elements = []
     flatten_tree(dlg, all_elements)
-    #flatten_tree(Desktop(backend="uia").element_info, all_elements)
-
+    
     desktop = Desktop(backend="uia")
 
     #Find the tbar
@@ -95,7 +100,6 @@ def getTree():
         taskbar = desktop.window(title="Taskbar")
     except Exception as e:
         print("ML-getTree()-Taskbar not found!")
-        exit()
 
     tbar_elements = []
     flatten_tree(taskbar, tbar_elements)
@@ -158,8 +162,7 @@ def stable_tree(stable_checks=2, interval=0.5):
 
         last_hash = current_hash
 
-        if stable_count >= stable_checks:
-            #Turn to False if working already (this is for testing)
+        if stable_count >= stable_checks or checks>=10:
             
             print("\n\nML-stable_tree()-Page is stable thus CONTINUING, after", checks, "checks.")
             if True:
@@ -170,6 +173,5 @@ def stable_tree(stable_checks=2, interval=0.5):
 
 
         time.sleep(interval)
-
-time.sleep(3)
-stable_tree()
+if __name__ == "__main__":
+    stable_tree()
