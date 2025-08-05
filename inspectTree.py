@@ -76,7 +76,7 @@ def getTree():
             windowName = GetWindowText(GetForegroundWindow())
             print("ML-getTree()-Detected Window:", windowName)
             
-            escaped_window_name = re.escape(windowName) + ".*"
+            escaped_window_name = ".*" + re.escape(windowName) + ".*"
 
             # Try connecting to the application
             app = Application(backend="uia").connect(title_re=escaped_window_name)
