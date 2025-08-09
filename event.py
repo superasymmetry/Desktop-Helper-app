@@ -3,6 +3,9 @@ import mouse as mouse
 import keyboard
 import time
 from extract import ExtractUtil
+import pygetwindow as gw
+from agents.extract import extractModel
+
 
 class Event:
     def __init__(self):
@@ -42,19 +45,26 @@ def on_mouse_click(x, y):
 
 def handle_click():
     x, y = mouse.get_position()
-    e = ExtractUtil()
-    e.get_major_controls(e.root_control)
-    clickable_elements = e.tree
-    print(clickable_elements)
-    time.sleep(1)
+    extract = extractModel()
+    clickable_elements = extract.get_clickable_elements()
+    element_name = None
     min_area = float('inf')
-    for( name, coords ) in clickable_elements.items():
-        if coords[0] <= x and x <= coords[1] and coords[2] <= y and y <= coords[3]:
-            area = (coords[1]-coords[0])*(coords[3]-coords[2])
-            if area > 0 and area < min_area:
+    for name, coords in clickable_elements.items():
+        if(coords[0] < x and coords[2] > x and coords[1] < y and coords[3] > y):
+            if(y>1776 and y<1920):  # check if it is in the taskbar position
+                area = (coords[2]-coords[0])*(coords[3]-coords[1])
+                if(area < min_area):
+                    min_area = area
+                    element_name = name
+
+    active_window_elements = extract.get_active_window_elements()
+    for name, coords in active_window_elements.items():
+        if(coords[0] < x and coords[2] > x and coords[1] < y and coords[3] > y):
+            area = (coords[2]-coords[0])*(coords[3]-coords[1])
+            if(area < min_area):
                 min_area = area
                 element_name = name
-    print(f"clicked on {element_name}")
+    print(f"Clicked element: {element_name} at ({x}, {y})")
     evn.trigger([x, y])
 
 mouse.on_click(handle_click)
