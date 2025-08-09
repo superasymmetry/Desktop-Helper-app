@@ -47,11 +47,14 @@ def handle_click():
     clickable_elements = e.tree
     print(clickable_elements)
     time.sleep(1)
+    min_area = float('inf')
     for( name, coords ) in clickable_elements.items():
-        if coords[0] < x < coords[1] and coords[2] < y < coords[3]:
-            element_name = name
-            print(f"Clicked on clickable element: {element_name}")
-            break
+        if coords[0] <= x and x <= coords[1] and coords[2] <= y and y <= coords[3]:
+            area = (coords[1]-coords[0])*(coords[3]-coords[2])
+            if area > 0 and area < min_area:
+                min_area = area
+                element_name = name
+    print(f"clicked on {element_name}")
     evn.trigger([x, y])
 
 mouse.on_click(handle_click)
@@ -61,7 +64,6 @@ if __name__ == '__main__':
     print("tracking .. press ctrl+c to stop")
     
     try:
-        # Keep the program running to listen for events
         while True:
             time.sleep(0.1)
     except KeyboardInterrupt:
