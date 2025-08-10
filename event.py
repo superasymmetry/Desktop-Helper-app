@@ -1,17 +1,13 @@
-import pyautogui, sys
+import sys
 import mouse as mouse
 import keyboard
 import time
-from extract import ExtractUtil
-import pygetwindow as gw
 from agents.extract import extractModel
 
 
 class Event:
     def __init__(self):
         self.__listeners = []
-        self.agent = ExtractUtil()
-        self.clickables = self.agent.get_clickable_elements()
 
     # Define a getter for the 'on' property which returns the decorator.
     @property
@@ -84,8 +80,6 @@ def on_key_release(key):
   if key == "shift":
     print("SHIFT KEY RELEASED!")
 
-# Remove keyboard.Listener usage since we are using the 'keyboard' module
-# Instead, use keyboard hooks if needed
 keyboard.on_press(on_key_press)
 keyboard.on_release(on_key_release)
 
