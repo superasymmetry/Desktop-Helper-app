@@ -38,14 +38,10 @@ class Event:
         for func in self.__listeners: func(*args)
 
 evn = Event()
+extract = extractModel()
 
 @evn.on
 def on_mouse_click(x, y):
-    print(f"Mouse clicked at ({x}, {y})")
-
-def handle_click():
-    x, y = mouse.get_position()
-    extract = extractModel()
     clickable_elements = extract.get_clickable_elements()
     element_name = None
     min_area = float('inf')
@@ -65,36 +61,46 @@ def handle_click():
                 min_area = area
                 element_name = name
     print(f"Clicked element: {element_name} at ({x}, {y})")
+
+def handle_click():
+    x, y = mouse.get_position()
     evn.trigger([x, y])
 
-mouse.on_click(handle_click)
-
+@evn.on
 def on_key_press(key):
   print("Key pressed: ", key)
 
   if hasattr(key, "char") and key.char == "z":
     print("Z PRESSED!")
 
+def handle_key_press(event):
+  key = event.name
+  evn.trigger([key])
+
 def on_key_release(key):
   print("Key released: ", key)
   # if you need to check for a special key like shift you can
   # do so like this:
-  if key == keyboard.Key.shift:
+  if key == "shift":
     print("SHIFT KEY RELEASED!")
 
-keyboard_listener = keyboard.Listener(
-    on_press=on_key_press,
-    on_release=on_key_release)
+# Remove keyboard.Listener usage since we are using the 'keyboard' module
+# Instead, use keyboard hooks if needed
+keyboard.on_press(on_key_press)
+keyboard.on_release(on_key_release)
+
+mouse.on_click(handle_click)
 
 if __name__ == '__main__':
     
     print("tracking .. press ctrl+c to stop")
-    kayboard_listener.start()
+    
     try:
         while True:
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nstopped")
+        sys.exit(0)
 
     # from some import some
 
