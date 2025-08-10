@@ -69,10 +69,27 @@ def handle_click():
 
 mouse.on_click(handle_click)
 
+def on_key_press(key):
+  print("Key pressed: ", key)
+
+  if hasattr(key, "char") and key.char == "z":
+    print("Z PRESSED!")
+
+def on_key_release(key):
+  print("Key released: ", key)
+  # if you need to check for a special key like shift you can
+  # do so like this:
+  if key == keyboard.Key.shift:
+    print("SHIFT KEY RELEASED!")
+
+keyboard_listener = keyboard.Listener(
+    on_press=on_key_press,
+    on_release=on_key_release)
+
 if __name__ == '__main__':
     
     print("tracking .. press ctrl+c to stop")
-    
+    kayboard_listener.start()
     try:
         while True:
             time.sleep(0.1)
