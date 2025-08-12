@@ -12,15 +12,12 @@ import sys
 import os
 import urllib.request
 from PIL import Image
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_pinecone import PineconeEmbeddings
-from pinecone import Pinecone
-
 import inspectTree
-print("ALL IMPORTS COMPLETE")
 
 omniParser_setUp=False
+client = Groq(api_key = GROQ_API_KEY)
+
+print("ALL IMPORTS COMPLETE")
 
 #Sets up OmniParser
 def opSetUp():
@@ -51,11 +48,8 @@ def opSetUp():
     print("That step completed")
     #==END OF OMNIPARSER SETUP==
 
-
-client = Groq(api_key = GROQ_API_KEY)
-
-def call_with_rag(client, query, img_base64, chat_history, feature_list, context_chunks=None):
-    context = "\n\n".join([chunk.get('metadata', {}).get('text', '') for chunk in context_chunks])
+#Automation agent
+def autoAgent(client, query, img_base64, chat_history, feature_list):
     completion = client.chat.completions.create(
         model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
@@ -67,30 +61,29 @@ def call_with_rag(client, query, img_base64, chat_history, feature_list, context
                     "Stop as soon as possible after the minimum number of steps.\n"
                     "To stop when the task is done, respond ONLY with {\"tool\": \"Done\", \"args\": {}}.\n"
                     "When not done, pick **one** tool for the next step and output ONLY the JSON object specified.\n"
-                    "Some context are provided to help you execute the task. {context}\n" if context else ""
                     "Important: If you want to type something, into a search bar for example, assume that the input for the search is not yet selected. This means you must click on it before typing. If you type and it doesn't work, it means you didn't select the input properly.\n"
+                    "If you find that there are not enough detected elements, output the exact JSON {\"tool\": \"Insufficient\", \"args\": {}}.\n"
                     "Tools are as follows:\n"
-                    "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\" }} }}\n\n"
+                    "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\", \"xPos\": \"value\", \"yPos\": \"value\" }} }}\n\n"
                     "- Type-Tool: Type text on an element. Output: {{ \"tool\": \"Type-Tool\", \"args\": {{ \"text\": \"value\" }} }}\n\n"
                     "- Scroll-Tool: Scroll on the screen. {{ \"tool\": \"Scroll-Tool\", \"args\": {{ \"axis\": \"horizontal/vertical\", \"direction\": \"up/down\" }} }}\n\n"
-                    "- Drag-Tool: Drag from one point to another. {{ \"tool\": \"Drag-Tool\", \"args\": {{ \"initial_element\": \"value\", \"final_position\": \"value\" }} }}\n\n"
+                    "- Drag-Tool: Drag from one point to another. {{ \"tool\": \"Drag-Tool\", \"args\": {{ \"start_x\": \"value\", \"start_y\": \"value\", \"end_x\": \"value\", \"end_y\": \"value\" }} }}\n\n"
                     "- Shortcut-Tool: Press keyboard shortcuts (e.g., Ctrl+C to copy, Ctrl+V to paste). {{ \"tool\": \"Shortcut-Tool\", \"args\": {{ \"keys\": [\"list of keys\"] }} }}\n\n"
                     "- Key-Tool: Press a single key. {{ \"tool\": \"Key-Tool\", \"args\": {{ \"key\": \"value\" }} }}\n\n"
                     "- Launch-Tool: Open an app. {{ \"tool\": \"Launch-Tool\", \"args\": {{ \"app\": \"value\" }} }}\n\n"
-                    "- Query-Tool: Query Pinecone for relevant chunks. {{ \"tool\": \"Query-Tool\", \"args\": {{ \"query\": \"value\", \"top_k\": value }} }}\n\n"
                     "Only respond with one tool call, strictly in JSON format as specified.\n"
                 )
             },
             {
-                "role": "user",
+                "role": "user",  
                 "content": [
                     {
                         "type": "text",
                         "text": (
-                            f"Your task is {query}. The actions you have taken so far are: {chat_history}.\n\n"
+                            f"Your task is {query}. If you have done the bare minimum to do this, STOP IMMEDIATELY. The actions you have taken so far are: {chat_history}. Try not to repeat your last actions.\n\n"
                             f"The list of elements on this laptop is here: {feature_list}.\n\n"
-                            "Interpret the screenshot and features given. Try not to perform your last action again."
-                            "Output the JSON object corresponding to the next step."
+                            "Interpret the screenshot and features given to determine whether you are done and your next steps.\n"
+                            "Output ONLY the JSON object corresponding to the next step."
                         )
                     },
                     {
@@ -113,40 +106,33 @@ def call_with_rag(client, query, img_base64, chat_history, feature_list, context
 
     return action
 
-#New call function
-def call(client, query, img_base64, chat_history, feature_list):
-    prompt = ("You are an agent that controls a computer to complete tasks.\n"
-            "Your task is {query}. If you have already done the task, stop immediately.\n"
-            "Stop as soon as possible after the minimum number of steps.\n"
-            "To stop when the task is done, respond ONLY with {\"tool\": \"Done\", \"args\": {}}.\n"
-            "When not done, pick **one** tool for the next step and output ONLY the JSON object specified.\n"
-            "Important: If you want to type something, into a search bar for example, assume that the input for the search is not yet selected. This means you must click on it before typing. If you type and it doesn't work, it means you didn't select the input properly.\n"
-            "Tools are as follows:\n"
-            "- Click-Tool: Click at coordinates. Output in this format {{ \"tool\": \"Click-Tool\", \"args\": {{ \"element\": \"value\" }} }}\n\n"
-            "- Type-Tool: Type text on an element. Output: {{ \"tool\": \"Type-Tool\", \"args\": {{ \"text\": \"value\" }} }}\n\n"
-            "- Scroll-Tool: Scroll on the screen. {{ \"tool\": \"Scroll-Tool\", \"args\": {{ \"axis\": \"horizontal/vertical\", \"direction\": \"up/down\" }} }}\n\n"
-            "- Drag-Tool: Drag from one point to another. {{ \"tool\": \"Drag-Tool\", \"args\": {{ \"initial_element\": \"value\", \"final_position\": \"value\" }} }}\n\n"
-            "- Shortcut-Tool: Press keyboard shortcuts (e.g., Ctrl+C to copy, Ctrl+V to paste). {{ \"tool\": \"Shortcut-Tool\", \"args\": {{ \"keys\": [\"list of keys\"] }} }}\n\n"
-            "- Key-Tool: Press a single key. {{ \"tool\": \"Key-Tool\", \"args\": {{ \"key\": \"value\" }} }}\n\n"
-            "- Launch-Tool: Open an app. {{ \"tool\": \"Launch-Tool\", \"args\": {{ \"app\": \"value\" }} }}\n\n"
-            "Only respond with one tool call, strictly in JSON format as specified.\n")
+#Conditional agent
+def cond(client, query, img_base64, feature_list):
     completion = client.chat.completions.create(
         model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
             {
                 "role": "system",
-                "content": prompt
+                "content": (
+                    f"You are a helper agent tasked to assist another agent which is controlling this desktop.\n"
+                    f"You are to determine whether the given condition of: {query} has been satisfied.\n"
+                    "You are to output the exact JSON indicated among the options below:\n"
+                    "If you are able to determine conclusively that the condition is satisfied: Output {{ \"type\": \"Done\", \"args\": {{ \"element\": \"True\"}} }}\n"
+                    "If you are able to determine conclusively that the condition has not been satisfied: Output {{ \"type\": \"Done\", \"args\": {{ \"element\": \"False\"}} }}\n"
+                    "If you believe that you need past states of the screen to determine conclusively that the condition has not been satisfied: Output {{ \"type\": \"Done\", \"args\": {{ \"element\": \"False\"}} }}\n"
+                    
+                )
             },
             {
-                "role": "user",
+                "role": "user",  
                 "content": [
                     {
                         "type": "text",
                         "text": (
-                            f"Your task is {query}. The actions you have taken so far are: {chat_history}.\n\n"
+                            f"Remember, you are trying to determine: {query}. If you can mak, STOP IMMEDIATELY and output True or False.\n"
                             f"The list of elements on this laptop is here: {feature_list}.\n\n"
-                            "Interpret the screenshot and features given. Try not to perform your last action again."
-                            "Output the JSON object corresponding to the next step."
+                            "Interpret the screenshot and features given to determine the condition.\n"
+                            "Output ONLY the JSON object specified."
                         )
                     },
                     {
@@ -169,41 +155,44 @@ def call(client, query, img_base64, chat_history, feature_list):
 
     return action
 
-def click_agent(client, feature, feature_list):
+#Identification agent
+def identify(client, query, feature_list):
     completion = client.chat.completions.create(
-        model="meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
-        {
-            "role": "user",
-            "content": [
             {
-                "type": "text",
-                "text": f"You need to click on the element on this computer: {feature}. The list of elements on this laptop are {feature_list} What are the coordinates for this element?"
-                +" Output in only this json format {{ \"x\": \"value\", \"y\": \"value\" }}. If the feature_list does not contain the element you are looking for, output the exact json {{ \"x\": \"-1024\", \"y\": \"-1024\" }}\n\n"
+                "role": "system",
+                "content": (
+                    f"You are a helper agent tasked to assist another agent which is controlling this desktop.\n"
+                    f"You are to identify the element in the element list that best fits the description: {query}.\n"
+                    "You are to output the exact JSON corresponding to the query above in the element list provided.\n"                    
+                )
             },
-            ]
-        }
+            {
+                "role": "user",  
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Remember, you are trying to find the element: {query} in the below feature list.\n"
+                            f"The list of elements on this laptop is here: {feature_list}.\n\n"
+                            "Output ONLY the queried-for JSON element."
+                        )
+                    },
+                ]
+            }
         ],
         temperature=0,
-        max_completion_tokens=128,
+        max_completion_tokens=1024,
         top_p=1,
         stream=False,
         response_format={"type": "json_object"},
         stop=None,
     )
 
-    res = completion.choices[0].message
-    action = json.loads(res.content)
-    print(action)
-    return action
+    res = completion.choices[0].message.content
 
-def capture_screen_OLD():
-    screenshot = pyautogui.screenshot()
-    buffered = io.BytesIO()
-    screenshot.save(buffered, format="JPEG")
-    img_bytes = buffered.getvalue()
-    img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-    return f"data:image/jpeg;base64,{img_base64}"
+    return res
 
 #New - compression is probably better
 def capture_screen(max_size=(800, 800), quality=40):
@@ -215,7 +204,6 @@ def capture_screen(max_size=(800, 800), quality=40):
     img_bytes = buffered.getvalue()
     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
     return f"data:image/jpeg;base64,{img_base64}"
-
 
 def launch_tool(app):
     open_app(app, match_closest=True)
@@ -268,36 +256,9 @@ def vision_fallback():
     
     return subset
 
-def click_tool(client, feature, subset):
-    
-    label = click_agent(client, feature, subset)
-    
-    if isinstance(label['x'],str):
-        label['x']=int(label['x'])
-    if isinstance(label['y'],str):
-        label['y']=int(label['y'])
-  
-    x, y = label['x'],label['y']
-    
-    triedAgain=False
-    
-    if label['x']==-1024 and label['y']==-1024 and triedAgain==False:
-        triedAgain=True
-        subset=inspectTree.stable_tree()
-        label = click_agent(client, feature, subset)
-        
-        if isinstance(label['x'],str):
-            label['x']=int(label['x']) 
-        if isinstance(label['y'],str):
-            label['y']=int(label['y'])
-        x, y = label['x'],label['y']
-    
-    #If the agent declares itself confused twice then resort to OmniParser
-    elif label['x']==-1024 and label['y']==-1024:
-        subset=vision_fallback()
-        label = click_agent(client, feature, subset)
-        x, y = 3200*(label['x'])+1, 2000*(label['y'])+1
-        
+def click_tool_NEW(xPos,yPos):
+    x=int(xPos)
+    y=int(yPos)
     pyautogui.click(x, y)
     return
 
@@ -349,39 +310,51 @@ def script_tool(language, script_str):
     )
     return result.stdout
 
-def query_pinecone(query_text, top_k=3):
-        """Query Pinecone for relevant chunks"""
-        try:
-            results = index.query_records(
-                namespace="reach-docs",
-                query=query_text,
-                top_k=top_k,
-                include_metadata=True
-            )
-            return results.get('matches', [])
-        except Exception as e:
-            print(f"Error querying Pinecone: {e}")
-            return []
-
-def cua(client, query):
+#Conditional node call
+def condCall(client, query):
     chat_history = []
-    queried = False
+    vision_fallback_activated=False
+    all_elements=inspectTree.stable_tree()
+    while True:
+        screenshot_base64 = capture_screen()
+        response = cond(client, query, screenshot_base64, all_elements)
+        
+        if(response['type'] == "Done"):
+            print("Task completed - result is:",end=' ')
+            return bool(response['args']['element'])
+
+#Identification node call
+def idCall(client,query):
+    chat_history = []
+    screenshot_base64 = capture_screen()
+    all_elements=inspectTree.stable_tree()
+    response = identify(client, query, all_elements)
+    chat_history.append(response)
+    print("Identification completed - result is:",end=' ')
+    print(response)
+    return response
+
+#Automation node call
+def autoCall(client, query):
+    chat_history = []
+    vision_fallback_activated=False
     while True:
         screenshot_base64 = capture_screen()
         
         #Added by Mars here- seems to improve accuracy?
-        all_elements=inspectTree.stable_tree()
-        if queried:
-            response = call(client, query, screenshot_base64, chat_history, all_elements, context_chunks=all_elements)
+        if vision_fallback_activated==False:
+            all_elements=inspectTree.stable_tree()
         else:
-            response = call(client, query, screenshot_base64, chat_history, all_elements)
-        queried = False
+            all_elements=vision_fallback()
+            vision_fallback_activated=False
+        response = autoAgent(client, query, screenshot_base64, chat_history, all_elements)
         chat_history.append(response)
         print(response)
         if(response['tool'] == "Launch-Tool"):
             launch_tool(response['args']['app'])
         elif(response['tool'] == "Click-Tool"):
-            click_tool(client, response['args']['element'], all_elements)
+            #click_tool(client, response['args']['element'], all_elements)
+            click_tool_NEW(response['args']['xPos'],response['args']['yPos'])
         elif(response['tool'] == "Type-Tool"):
             type_tool(response['args']['text'])
         elif(response['tool'] == "Clipboard-Tool"):
@@ -404,16 +377,12 @@ def cua(client, query):
         elif(response['tool'] == "Script-Tool"):
             script_output = script_tool(response['args']['language'], response['args']['script'])
             print("Script Output:", script_output)
-        elif(response['tool'] == "Query-Tool"):
-            query_results = query_pinecone(response['args']['query'])
-            print("Query Results:", query_results)
-            queried = True
+        elif(response['tool'] == "Insufficient"):
+            vision_fallback_activated=True
         elif(response['tool'] == "Done"):
             print("Task completed.")
             break
 
         time.sleep(1)
 
-if __name__ == "__main__":
-    cua(client, "Open Google Chrome, navigate to Youtube, find videos from MrBeast and click the top result.")
-    
+autoCall(client,"Open microsoft teams. Write a new message to Coco Zeng that says 'testing.'")
