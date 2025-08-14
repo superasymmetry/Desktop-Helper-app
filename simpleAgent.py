@@ -15,7 +15,8 @@ from PIL import Image
 import inspectTree
 
 omniParser_setUp=False
-client = Groq(api_key = GROQ_API_KEY)
+
+client = Groq(api_key = GRQOQ_API_KEY)
 
 print("ALL IMPORTS COMPLETE")
 
