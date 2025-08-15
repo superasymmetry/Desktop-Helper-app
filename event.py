@@ -55,11 +55,11 @@ sequence = []
 
 @scroll_evn.on
 def on_mouse_scroll(x, y, delta):
-    sequence.append(f"Scrolled at {x}, {y} with delta: {delta}")
+    sequence.append(f"Scrolled at;;{x};;{y};;with delta;;{delta}")
 
 @key_evn.on
 def on_key_press(key):
-    sequence.append(f"Key pressed: {key}")
+    sequence.append(f"Key pressed;;{key}")
 
 def handle_click():
     x, y = mouse.get_position()
@@ -81,7 +81,7 @@ def handle_click():
 
 @click_handler.add_listener
 def on_uia_clicked(element_info):
-    sequence.append(f"Clicked {element_info['name']} ({element_info['type']})")
+    sequence.append(f"Clicked;;{element_info['coordinates']};;{element_info['name']};;{element_info['type']}")
 
 
 def handle_scroll(x, y, delta):
@@ -145,6 +145,41 @@ def compress(sequence):
         
     return result
 
+def playback(sequence):
+    for item in sequence:
+        print(item)
+        if(item.startswith('Clicked')):
+            # search for last (stuff)
+            parsed = item.split(';;')
+            print(parsed)
+            if(len(parsed)>3):
+                control_type = parsed[3]
+                element_name = parsed[2]
+    
+            code_string = f"auto.{control_type}(searchDepth=3, Name='{element_name}').Click()"
+            print(code_string)
+            try:
+                with auto.UIAutomationInitializerInThread():
+                    # Execute the dynamically built code
+                    control = eval(code_string)
+            except:
+                coords = parsed[1]
+                print(coords)
+                coords_clean = coords.strip("()") 
+                x, y = map(int, coords_clean.split(", "))
+                pyautogui.click(x, y)
+
+        elif item.startswith('Keys pressed;;'):
+            keys = item.split(';;')[1]
+            pyautogui.typewrite(keys)
+        
+        elif item.startswith('Scroll'):
+            parsed = item.split(';;')
+            x = int(parsed[1])
+            y = int(parsed[2])
+            delta = int(parsed[4])
+            pyautogui.scroll(delta, x, y)
+        time.sleep(0.5)
 
 if __name__ == '__main__':
 
@@ -160,15 +195,15 @@ if __name__ == '__main__':
         seq = []
         i = 0
         while i < len(sequence):
-            if "Key pressed:" in sequence[i]:
+            if "Key pressed;;" in sequence[i]:
                 temp = ""
-                while i < len(sequence) and "Key pressed:" in sequence[i]:
+                while i < len(sequence) and "Key pressed;;" in sequence[i]:
                     # parse the key pressed
-                    key = sequence[i].split(": ")[1]
+                    key = sequence[i].split(";;")[1]
                     temp += key
                     temp += " "
                     i += 1
-                seq.append(f"Keys pressed: {temp.strip()}")
+                seq.append(f"Keys pressed;;{temp.strip()}")
                 if i < len(sequence):
                     seq.append(sequence[i])
                     i += 1
@@ -176,4 +211,5 @@ if __name__ == '__main__':
                 seq.append(sequence[i])
                 i += 1
         print(seq)
+        playback(seq)
         sys.exit(0)
