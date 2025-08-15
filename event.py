@@ -110,10 +110,47 @@ def mouse_event_handler(event):
 mouse.hook(mouse_event_handler)
 keyboard.on_press(handle_keypress)
 
+def compress(sequence):
+    if not sequence:
+        return []
+    
+    result = []
+    i = 0
+    while i<len(sequence):
+        best_pattern = None
+        best_count = 1
+
+        for l in range(1, len(sequence)):
+            pattern = sequence[i:i+l]
+            count = 1
+
+            pos = i+l
+            # count the number of this pattern
+            while pos+l <= len(sequence) and sequence[pos:pos+l] == pattern:
+                count+=1
+                pos+=l
+            
+            if count>1 and count*l>best_count*len(best_pattern or []):
+                best_pattern = pattern
+                best_count = count
+        
+        if best_pattern and best_count>1:
+            result.append(best_count)
+            result.append(best_pattern)
+
+            i += best_count * len(best_pattern)
+        else:
+            result.append(sequence[i])
+            i+=1
+        
+    return result
+
+
 if __name__ == '__main__':
 
     print("tracking .. press ctrl+c to stop")
-    
+    print(compress(["a", "b", "c", "a", "b", "c", "x", "x", "x"]))
+
     try:
         while True:
             time.sleep(0.1)
